@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+</head>
+
+<body>
+  <div id="app"></div>
+  <script src="https://unpkg.com/vue@3"></script>
+  <script>
+    const { ref, computed, onMounted, createApp } = Vue
+
+    createApp({
+      template: `
+        <div class="container" ref="container" @scroll="onScroll">
+          <div class="panel" ref="panel" :style="{paddingTop: paddingTop + 'px'}">
+            <div class="item" v-for="item in visibleList" :key="item">{{ item }}</div>
+          </div>
+        </div>
+      `,
+      setup() {
+        const container = ref(null)
+        const panel = ref(null)
+
+        const raw = Array(100000).fill(0).map((v, i) => `item-${i}`)
+        const start = ref(0)
+        // 为了初始渲染完能计算一个item的高度，终止索引设置为1
+        const end = ref(1)
+        // 截取初始渲染的item数组
+        const visibleList = computed(() => raw.slice(start.value, end.value))
+
+
+        const paddingTop = ref(0)
+
+        let itemHeight = 1
+        let count = 0
+
+        const bufferTop = 10
+        const bufferBottom = 10
+
+        onMounted(() => {
+          // 为什么加了延时？获取不到视窗的高度
+          // TODO 为什么获取不到视窗的高度
+          setTimeout(() => {
+            // 动态获取第一个item的高度
+            itemHeight = panel.value.firstElementChild.offsetHeight
+            // 根据实际获取的item的高度，设置panel的总高度
+            panel.value.style.height = raw.length * itemHeight + 'px'
+            // 根据视窗的高度动态计算视窗能展示多少个item
+            count = Math.floor(container.value.offsetHeight / itemHeight)
+            end.value = count + bufferBottom
+          }, 10)
+        })
+
+        // 滚动事件触发频率很高，加个定时器，延迟16ms，保证滚动效果比较丝滑
+        let timer = null
+        const onScroll = (e) => {
+          if (timer) clearTimeout(timer)
+          timer = setTimeout(() => {
+            // 根据滚动距离，计算移出屏幕的item数量
+            const startValue = Math.floor(e.target.scrollTop / itemHeight)
+            // 如果移出item数量小于顶部缓存数量，起始索引不变，仍然为0，此时移出的item仍然是被渲染的
+            // 如果移出item数量大于顶部缓存数量，起始索引=移出item数量-缓存数量，此时位于缓存区域上面的item就不会被渲染了
+            start.value = startValue > bufferTop ? startValue - bufferTop : 0
+            // 上滑过程中，终止索引-起始索引的差值由开始的视窗显示数量+底部缓存数量，逐渐增大，最终稳定为顶部缓存数+视窗显示数量+底部缓存数量
+            end.value = startValue + count + bufferBottom
+            // 动态设置paddingTop，让起始索引的item处于视窗+顶部缓存区域的最上面
+            paddingTop.value = start.value * itemHeight
+          }, 16)
+        }
+
+        return {
+          container,
+          panel,
+          paddingTop,
+          visibleList,
+          onScroll
+        }
+      }
+    }).mount('#app')
+  </script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+    }
+
+    .container {
+      height: 100vh;
+      overflow-y: scroll;
+    }
+
+    .item {
+      border: 1px solid #eee;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+  </style>
+</body>
+
+</html>
